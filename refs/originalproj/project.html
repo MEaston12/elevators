@@ -1,0 +1,336 @@
+<!DOCTYPE html><html><head>
+    <title>Elevator Saga - the elevator programming game</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="font-awesome-4.1-1.0/css/font-awesome.min.css" type="text/css" media="all">
+    <link rel="stylesheet" href="libs/codemirror/codemirror.css">
+    <link rel="stylesheet" href="libs/codemirror/themes/solarized.css">
+    <link rel="stylesheet" href="style.css" type="text/css" media="all">
+    <script type="text/javascript" src="libs/jquery-2.1.1.min.js"></script>
+    <script type="text/javascript" src="libs/lodash.min.js"></script>
+    <script type="text/javascript" src="libs/riot.js"></script>
+    <script type="text/javascript" src="libs/codemirror/codemirror.js"></script>
+    <script type="text/javascript" src="libs/codemirror/addon/edit/closebrackets.js"></script>
+    <script type="text/javascript" src="libs/codemirror/mode/javascript/javascript.js"></script>
+    <script type="text/javascript" src="libs/unobservable.js"></script>
+    <script type="text/javascript" src="base.js"></script>
+    <script type="text/javascript" src="movable.js"></script>
+    <script type="text/javascript" src="floor.js"></script>
+    <script type="text/javascript" src="user.js"></script>
+    <script type="text/javascript" src="elevator.js"></script>
+    <script type="text/javascript" src="interfaces.js"></script>
+    <script type="text/javascript" src="world.js"></script>
+    <script type="text/javascript" src="presenters.js"></script>
+    <script type="text/javascript" src="challenges.js"></script>
+    <script type="text/javascript" src="fitness.js"></script>
+    <script type="text/javascript" src="app.js"></script>
+
+    <script type="text/template" id="user-template">
+        <i class="movable fa user fa-{u.displayType} {state}"></i>
+    </script>
+    <script type="text/template" id="floor-template">
+        <div class="floor" style="top: {yPosition}px">
+            <span class="floornumber">{level}</span>
+            <span class="buttonindicator">
+                <i class="fa fa-arrow-circle-up up"></i>
+                <i class="fa fa-arrow-circle-down down"></i>
+            </span>
+        </div>
+    </script>
+    <script type="text/template" id="elevator-template">
+        <div class="elevator movable" style="width: {e.width}px">
+            <span class="directionindicator directionindicatorup"><i class="fa fa-arrow-circle-up up activated"></i></span>
+            <span class="floorindicator"><span></span></span>
+            <span class="directionindicator directionindicatordown"><i class="fa fa-arrow-circle-down down activated"></i></span>
+            <span class="buttonindicator"></span>
+        </div>
+    </script>
+
+    <script type="text/template" id="elevatorbutton-template">
+        <span class="buttonpress">{floorNum}</span>
+    </script>
+
+    <script type="text/template" id="feedback-template">
+        <div class="feedback">
+            <h2 class="emphasis-color">{title}</h2>
+            <p class="emphasis-color">{message}</p>
+            <a href="{url}" class="emphasis-color">Next challenge <i class="fa fa-caret-right blink" style="text-decoration: blink"></i></a>
+        </div>
+    </script>
+
+    <script type="text/template" id="challenge-template">
+        <div class="left">
+            <h3>Challenge #{num}: {challenge.condition.description}</h3>
+        </div>
+        <button class="right startstop unselectable" style="width: 110px">{startButtonText}</button>
+        <h3 class="right">
+            <i class="fa fa-minus-square timescale_decrease unselectable"></i>
+            <span class="emphasis-color" style="display: inline-block; width: 22px; text-align: center">{timeScale}</span>
+            <i class="fa fa-plus-square timescale_increase unselectable"></i>
+        </h3>
+    </script>
+
+    <script type="text/template" id="codestatus-template">
+        <h5 class="error" style="display: {errorDisplay}"><i class="fa fa-warning error-color"></i> There is a problem with your code: {errorMessage}</h5>
+    </script>
+
+    <script type="text/plain" id="default-elev-implementation">{
+  init: function (elevators, floors) {
+    const AVG_WEIGHT = (100 + 55) / 2;
+    const EST_ENTERING = 2;
+    const CHALLENGE_NO = parseInt(window.location.href.match(/=(\d+)/)?.[1] || '1');
+
+    const deliverMap = Array.from(Array(floors.length), () => Array(elevators.length).fill(false));
+    const ticketList = {
+      up: Array(floors.length).fill(false),
+      down: Array(floors.length).fill(false)
+    }
+
+    class Route {
+      constructor(start, end){
+        this.start = start;
+        this.end = end;
+        this.dir = (start < end) ? 'up' : 'down';
+        this.done = false;
+      }
+    }
+
+    function addTicket(floorNum, direction) {
+      //Function adds ticket to ticketList
+      //  OPT: Assign directly to elevator that can best handle the ticket instead of waiting for route assignment
+      ticketList[direction][floorNum] = true;
+      console.log('ticket added at', floorNum, direction);
+    }
+    function addDeliver(floorNum, elevator) {
+      //Check if delivery point is beyond our current route, if so, reroute to that target
+      deliverMap[floorNum][elevator.num] = true;
+      if (
+        (elevator.goingUpIndicator() && elevator.destinationQueue[0] < floorNum) ||
+        (elevator.goingDownIndicator() && elevator.destinationQueue[0] > floorNum)
+      ) {
+        console.log('extending route to', floorNum);
+        elevator.destinationQueue = [];
+        elevator.checkDestinationQueue();
+        elevator.goToFloor(floorNum);
+        return;
+      }
+      if (elevator.destinationQueue.length === 0) {
+        elevator.goToFloor(floorNum);
+      }
+    }
+    function chartCourse(elevator) { //TODO: Clean up this function
+      //Determine location to begin, then goToFloor top floor of the run
+      //  Need to look at ticketList and take tickets based on route
+      //OPT: Smarter route charting
+      console.log(JSON.stringify(ticketList));
+      let noTickets = true;
+      for (let i = 0; i < floors.length; i++) {
+        if (ticketList.down[i]) noTickets = false;
+        if (ticketList.up[i]) noTickets = false;
+      }
+      if (noTickets) {
+        //If ticketlist is empty, true idle behavior here
+        elevator.goToFloor(elevator.num % floors.length);
+        return;
+      }
+      let maxRange = floors.length * 3
+      let upDest = maxRange;
+      let downDest = maxRange;
+      let upStart = maxRange;
+      let downStart = maxRange;
+      for (let i = 0; i < floors.length; i++) {
+        if (ticketList.up[i]) {
+          if (upStart === maxRange) upStart = i;
+          upDest = i;
+        }
+        if (ticketList.down[i]) {
+          if (downDest === maxRange) downDest = i;
+          downStart = i;
+        }
+      }
+      if (upStart === upDest) upDest++;
+      if (downStart === downDest) downDest--;
+
+      const currFloor = elevator.currentFloor();
+      if (elevator.goingUpIndicator() && ticketList.up[currFloor]) {
+        //Chart route going up from here
+        elevator.setIndicator('up');
+        elevator.goToFloor(upDest);
+        console.log('picking upRoute from current:', currFloor + '-' + upDest);
+      } else if (elevator.goingDownIndicator() && ticketList.down[currFloor]) {
+        //Chart route going down from here
+        elevator.setIndicator('down');
+        elevator.goToFloor(downDest);
+        console.log('picking downRoute from current:', currFloor + '-' + downDest);
+      } else { //Need to determine start point of route
+        elevator.relocating = true; //Skip checks on the way to next destination
+        //Determine whether to take the up route or the down route based on current location
+        if (Math.abs(currFloor - upStart) < Math.abs(currFloor - downStart)) {
+          //Go to Upstart, do up-route
+          elevator.setIndicator('up');
+          elevator.goToFloor(upStart);
+          elevator.goToFloor(upDest);
+          console.log('picking upRoute:', upStart + '-' + upDest);
+        } else {
+          //Go to Downstart, do down-route
+          elevator.setIndicator('down');
+          elevator.goToFloor(downStart);
+          elevator.goToFloor(downDest);
+          console.log('picking downRoute:', downStart + '-' + downDest);
+        }
+
+      }
+    }
+    function checkStop(floorNum, elevator) {
+      if (elevator.relocating) return;
+      const del = deliverMap[floorNum][elevator.num];
+      const tick = ticketList[elevator.destinationDirection()][floorNum];
+      if (del) {
+        elevator.goToFloor(floorNum, true);
+        return;
+      }
+      if (tick) {
+        const emptySlots = elevator.maxPassengerCount() - elevator.loadFactor() / AVG_WEIGHT * elevator.maxPassengerCount() * 100
+        //PassengerCount formula created by peeking at source code
+        if (emptySlots < EST_ENTERING || EST_ENTERING * 75 > (1 - elevator.loadFactor()) * 100) {
+          //Elevator is too full, return stop to ticketlist and skip
+          return;
+        }
+        ticketList[elevator.destinationDirection()][floorNum] = false;
+        elevator.goToFloor(floorNum, true);
+        return;
+      }
+    }
+    function cleanupStop(floorNum, elevator) {
+      const dir = elevator.goingUpIndicator() ? 'up' : 'down';
+      elevator.relocating = false;
+      deliverMap[floorNum][elevator.num] = false;
+      ticketList[dir][floorNum] = false;
+    }
+
+    //Event binding, shouldn't handle any real logic, just link to coordinator
+    for (let i = 0; i < elevators.length; i++) {
+      const elevator = elevators[i];
+      elevator.on('floor_button_pressed', floorNum => {
+        addDeliver(floorNum, elevator);
+      });
+      elevator.on('passing_floor', (floorNum, direction) => {
+        checkStop(floorNum, elevator);
+      });
+      elevator.on('stopped_at_floor', floorNum => {
+        cleanupStop(floorNum, elevator);
+      });
+      elevator.on('idle', () => {
+        chartCourse(elevator);
+      });
+      elevator.setIndicator = direction => {
+        elevator.goingUpIndicator(direction === 'up');
+        elevator.goingDownIndicator(direction === 'down');
+      }
+      elevator.num = i;
+    }
+    for (const floor of floors) {
+      floor.on('up_button_pressed', () => {
+        addTicket(floor.floorNum(), 'up');
+      });
+      floor.on('down_button_pressed', () => {
+        addTicket(floor.floorNum(), 'down');
+      });
+    }
+  },
+  update: function(dt, elevators, floors) {
+    // We normally don't need to do anything here
+  }
+}</script>
+    <script type="text/plain" id="devtest-elev-implementation">
+{
+    init: function(elevators, floors) {
+        var selectElevatorForFloorPickup = function(floorNum) {
+            return _.max(elevators, function(e) {
+                return (_.contains(e.destinationQueue, floorNum) ? 4 : 0) +
+                    (-e.destinationQueue.length*e.destinationQueue.length) +
+                    (-e.loadFactor()*e.loadFactor() * 3);
+            });
+        };
+
+        _.each(floors, function(floor) {
+            floor.on("down_button_pressed up_button_pressed", function() {
+                var elevator = selectElevatorForFloorPickup(floor.level);
+                if(!_.contains(elevator.destinationQueue, floor.level)) {
+                    elevator.goToFloor(floor.level);
+                }
+            });
+        });
+        _.each(elevators, function(elevator) {
+            elevator.on("floor_button_pressed", function(floorNum) {
+                elevator.goToFloor(floorNum);
+            });
+            elevator.on("idle", function() {
+                elevator.goToFloor(0);
+            });
+        });
+    },
+    update: function(dt, elevators, floors) {
+    }
+}
+    </script>
+
+
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="left">Elevator Saga <em class="emphasis-color">The elevator programming game</em></h1>
+            <a class="right" href="https://github.com/magwo/elevatorsaga/wiki/">Wiki &amp; Solutions</a>
+            <a class="right" href="documentation.html#docs">Documentation</a>
+            <a class="right" href="documentation.html">Help</a>
+        </div>
+
+        <noscript>
+            <h2>Your browser does not appear to support JavaScript. This page contains a browser-based programming game implemented in JavaScript.</h2>
+        </noscript>
+
+        <div class="challenge" style="height: 40px">
+        </div>
+
+        <div class="world">
+            <div class="feedbackcontainer"></div>
+            <div class="innerworld">
+            </div>
+            <div class="statscontainer">
+                <div style="top: 20px"><span class="key">Transported</span><span class="value transportedcounter"></span></div>
+                <div style="top: 40px"><span class="key">Elapsed time</span><span class="value elapsedtime"></span></div>
+                <div style="top: 60px"><span class="key">Transported/s</span><span class="value transportedpersec"></span></div>
+                <div style="top: 80px"><span class="key">Avg waiting time</span><span class="value avgwaittime"></span></div>
+                <div style="top: 100px"><span class="key">Max waiting time</span><span class="value maxwaittime"></span></div>
+                <div style="top: 120px"><span class="key" title="Number of floors that have been travelled by elevators">Moves</span><span class="value movecount"></span></div>
+            </div>
+        </div>
+
+        <div class="codestatus"></div>
+        <div class="code">
+            <textarea name="Code" id="code"></textarea>
+        </div>
+        <button id="button_reset" style="float: left">Reset</button>
+        <button id="button_resetundo" style="float: left">Undo reset</button>
+        <button id="button_apply" style="float: right">Apply</button>
+        <button id="button_save" style="float: right">Save</button>
+        <span id="save_message" style="float: right"></span>
+        <span id="fitness_message" style="float: right"></span>
+        <div style="clear:both;"></div>
+
+        <div style="margin-top: 20px">
+            <h3>Confused? Open the <a href="documentation.html">Help and API documentation</a> page</h3>
+        </div>
+    </div>
+
+
+
+<script>
+  if(!window.location.hash){
+    window.location.hash = "challenge=6"
+  }
+  setTimeout(() => {
+    $('#button_apply').trigger('click');
+  }, 500);
+</script>
+  </body></html>

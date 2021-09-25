@@ -1,4 +1,5 @@
-const elev = {
+module.exports = 6;
+const code = {
   init: function (elevators, floors) {
     const AVG_WEIGHT = (100 + 55) / 2;
     const EST_ENTERING = 2;

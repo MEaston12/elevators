@@ -1,0 +1,1 @@
+require('open')(__dirname + '/refs/originalproj/documentation.html')
