@@ -154,24 +154,35 @@
         return;
       }
       const currFloor = elevator.currentFloor();
-      let upDest;
-      let upStart;
-      let downDest;
-      let downStart;
+
       let distToUp = 100;
       let distToDown = 100;
       if(ticketList.up.length) {
-        upDest = ticketList.up.at(-1).floorNum;
-        upStart = ticketList.up.at(0).floorNum;
+        var upDest = ticketList.up.at(-1).floorNum;
+        var upStart = ticketList.up.at(0).floorNum;
         if (upDest && (upStart === upDest)) upDest++;
         distToUp = Math.abs(currFloor - upStart);
       }
       if(ticketList.down.length) {
-        downDest = ticketList.down.at(0).floorNum;
-        downStart = ticketList.down.at(-1).floorNum;
+        var downDest = ticketList.down.at(0).floorNum;
+        var downStart = ticketList.down.at(-1).floorNum;
         if (downDest && (downStart === downDest)) downDest--;
         distToDown = Math.abs(currFloor - downStart);
       }
+
+      if(lowWait){ //Determining oldest ticket if it matters
+        const oldUpTick = ticketList.up.reduce((a, b) => (a.timestamp < b.timestamp) ? a : b, {floorNum: null, timestamp: Date.now()});
+        const oldDownTick = ticketList.down.reduce((a, b) => (a.timestamp < b.timestamp) ? a : b, {floorNum: null, timestamp: Date.now()});
+        const oldestDir = (oldUpTick.timestamp < oldDownTick.timestamp) ? 'up' : 'down'
+        const oldestTick = (oldUpTick.timestamp < oldDownTick.timestamp) ? oldUpTick : oldDownTick;
+        const oldestDest = (oldestDir === 'up') ? upDest : downDest;
+        console.log(oldUpTick,oldDownTick);
+        console.log('Starting fastest route from:',oldestTick.floorNum,'To:',oldestDest);
+        elevator.route = new Route(oldestTick.floorNum, oldestDest);
+        elevator.route.begin(elevator);
+        return;
+      }
+
       if ((elevator.goingUpIndicator() && ticketList.up.includes(currFloor)) || 
         (elevator.goingDownIndicator() && ticketList.down.includes(currFloor))) {
         //Route will need to start here as people have already boarded
@@ -189,13 +200,14 @@
         console.log('No down tickets detected, defaulting to up ticket.', upStart, upDest);
         elevator.route = new Route(upStart, upDest);
       }
-      else if(distToUp < distToDown) {
-        console.log('Down tickets and up tickets detected, up is closer.', upStart, upDest);
-        elevator.route = new Route(upStart, upDest);
-      }
-      else {
-        console.log('Down tickets and up tickets detected, down is closer.', downStart, downDest);
-        elevator.route = new Route(downStart, downDest);
+      else { //Actually have to choose between uptickets and downtickets
+        if(distToUp < distToDown) {
+          console.log('Down tickets and up tickets detected, up is closer.', upStart, upDest);
+          elevator.route = new Route(upStart, upDest);
+        } else {
+          console.log('Down tickets and up tickets detected, down is closer.', downStart, downDest);
+          elevator.route = new Route(downStart, downDest);
+        }
       }
       elevator.route.begin(elevator);
     }
@@ -354,7 +366,7 @@
 
 <script>
   if(!window.location.hash){
-    window.location.hash = "challenge=7"
+    window.location.hash = "challenge=8"
   }
   setTimeout(() => {
     $('#button_apply').trigger('click');
