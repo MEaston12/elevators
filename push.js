@@ -20,5 +20,6 @@ const cheerio = require('cheerio');
   `);
   
   await fs.writeFile('./refs/originalproj/project.html', $.html());
+  await fs.writeFile('./elevators.txt', newCode);
   await open(__dirname + '/refs/originalproj/project.html');
 })();
