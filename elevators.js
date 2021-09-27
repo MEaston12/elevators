@@ -1,4 +1,4 @@
-module.exports = 8; //Challenge number to start at
+module.exports = 10; //Challenge number to start at
 const code = {
   init: function (elevators, floors) {
     const AVG_WEIGHT = (100 + 55) / 2;
@@ -74,8 +74,14 @@ const code = {
       }
       if (ticketList.up.length === 0 && ticketList.down.length === 0) {
         //If ticketlist is empty, true idle behavior here
+        if(lowWait) {
+          elevator.goToFloor(0);
+          elevator.setIndicator('up');
+          return;
+        }
         elevator.goToFloor(elevator.num % floors.length);
         elevator.setIndicator('');
+        
         console.log(`Elevator ${elevator.num} going home.`);
         return;
       }

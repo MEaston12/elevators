@@ -148,8 +148,14 @@
       }
       if (ticketList.up.length === 0 && ticketList.down.length === 0) {
         //If ticketlist is empty, true idle behavior here
+        if(lowWait) {
+          elevator.goToFloor(0);
+          elevator.setIndicator('up');
+          return;
+        }
         elevator.goToFloor(elevator.num % floors.length);
         elevator.setIndicator('');
+        
         console.log(`Elevator ${elevator.num} going home.`);
         return;
       }
@@ -366,7 +372,7 @@
 
 <script>
   if(!window.location.hash){
-    window.location.hash = "challenge=8"
+    window.location.hash = "challenge=10"
   }
   setTimeout(() => {
     $('#button_apply').trigger('click');
